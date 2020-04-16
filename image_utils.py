@@ -1,4 +1,6 @@
 import numpy as np
+import rawpy
+import imageio
 
 def xyz_to_lms(im: np.ndarray):
     """
@@ -26,3 +28,18 @@ def calculate_chromaticity(im):
     :return: a value between 0 and 1 representing the chromaticity
     """
     raise NotImplemented
+
+
+def save_linear_image(path):
+    with rawpy.imread(path) as raw:
+        rgb = raw.postprocess(gamma=(1, 1), no_auto_bright=True, output_bps=16)
+    imageio.imsave('samples/linear.tiff', rgb)
+
+def open_raw(path):
+    """
+    Opens a raw image
+    """
+    with rawpy.imread(path) as raw:
+        # rgb = raw.postprocess()
+        raw_image = raw.raw_image.copy()
+        return raw_image
