@@ -18,10 +18,10 @@ def xyz_to_lms(im: np.ndarray):
 
 def calculate_chromaticity(im):
     """
-    Given an image of only a gray-card, calculate the chromaticity of the camera's flash + setting
+    Given an image of only a gray-card in the center, calculate the chromaticity of the camera's flash + setting
     :param im: Image should be simple RAW format image of just a gray-card. If more than a gray-card was
     in the frame of the original image, crop the rest out.
-    :return: a value between 0 and 1 representing the chromaticity
+    :return: a 3-vector of values between 0 and 1 representing the delta from perfect gray.
     """
     raise NotImplemented
 
