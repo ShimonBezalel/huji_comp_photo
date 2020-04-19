@@ -24,9 +24,8 @@ def correct_white_balance(im_no_flash, im_flash, flash_chromaticity=DEFAULT_CHRO
     raise NotImplemented
 
 def run():
-    example = save_linear_image("samples/E1DXINBI000050.CR2")
-    plt.imshow(example)
-    plt.show()
+    image = imageio.imread('C:\other\huji_comp_photo\input\input-tiff\graycard.tiff')
+    calculate_chromaticity(image)
 
 
 if __name__ == '__main__':
