@@ -34,6 +34,7 @@ def calculate_chromaticity(im):
 	return chromaticity
 
 
+
 def save_linear_image(path):
 	with rawpy.imread(path) as raw:
 		rgb = raw.postprocess(gamma=(1, 1), no_auto_bright=True, output_bps=16)
