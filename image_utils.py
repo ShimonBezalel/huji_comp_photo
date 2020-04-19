@@ -4,6 +4,7 @@ import imageio
 
 from contants import CONVERSION_MATRIX
 
+
 def xyz_to_lms(im: np.ndarray):
     """
     Converts a given images from XYZ format to LMS format, using Hunt-Pointer-Estevez
@@ -15,12 +16,12 @@ def xyz_to_lms(im: np.ndarray):
     raise Exception("not implemented")
 
 
-
-def calculate_chromaticity(im):
+def calculate_chromaticity(im: np.ndarray):
     """
     Given an image of only a gray-card in the center, calculate the chromaticity of the camera's flash + setting
-    :param im: Image should be simple RAW format image of just a gray-card. If more than a gray-card was
-    in the frame of the original image, crop the rest out.
+    :rtype: np.ndarray
+    :param im: Image should be read from tiff format, an image of just a gray-card near the center of the image.
+    If more than a gray-card was in the frame of the original image, the rest is ignored.
     :return: a 3-vector of values between 0 and 1 representing the delta from perfect gray.
     """
     raise NotImplemented
