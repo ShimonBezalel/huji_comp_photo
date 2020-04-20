@@ -4,26 +4,42 @@ import matplotlib.pyplot as plt
 
 from image_utils import calculate_chromaticity
 
+SHOW_PLOTS = False
+
 class TestCalculate_chromaticity(TestCase):
     def test_synthetic_image(self):
         im_size = (100, 100, 3)
 
-        w = 10
-        h = 10
-        fig = plt.figure(figsize=(8, 8))
-        columns = 3
-        rows = 10
-        for gray_scale in np.linspace(0.1, 0.9, num=rows):
+        for gray_scale in np.linspace(0.3, 0.7, num=50):
             synthetic_gray_image : np.ndarray = gray_scale * np.ones(im_size)
 
-            noise = np.random.uniform(low=-0.05, high=0.05, size=im_size)
+            noisiness = 0.02
+            noise = np.random.uniform(low=-noisiness, high=noisiness, size=im_size)
 
-            flash_chromaticity = np.random.uniform(low=-0.1, high=0.1, size=(1, 3))
+            chromaticity_range = 0.06
 
-            flashed_image = synthetic_gray_image + flash_chromaticity
+            flash_chromaticity = np.random.uniform(low=1 - chromaticity_range,
+                                                   high=1 + chromaticity_range,
+                                                   size=(3, ))
 
-            noisy_image = flash_chromaticity + noise
+            flashed_image = synthetic_gray_image * flash_chromaticity
+
+            flash_chromaticity /= flash_chromaticity[2]
+
+            noisy_image = flashed_image + noise
+
+            if SHOW_PLOTS:
+                plt.imshow(noisy_image)
+                plt.show()
 
             result = calculate_chromaticity(noisy_image)
+            normalize = result / result[2]
+            print("Grayscale: {}".format(round(gray_scale, 2)))
+            print("Flash Chromaticity: {}".format(flash_chromaticity))
+            print("Result Chromaticity: {}".format(normalize))
+            print("--------------")
 
-            self.assertAlmostEqual(flash_chromaticity, result, places=1)
+            np.testing.assert_almost_equal(flash_chromaticity, normalize, decimal=1)
+
+    def test_real_image(self):
+        raise NotImplemented
