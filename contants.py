@@ -1,7 +1,9 @@
 import numpy as np
 import enum
 
-DEFAULT_CHROMATICITY = 0.5
+NO_CHROMATICITY = np.array((1, 1))
+
+EPSILON = 0.00001
 
 
 class CONVERSION_MATRIX(enum.Enum):
