@@ -1,8 +1,11 @@
 import numpy as np
 import rawpy
 import imageio
+from scipy.ndimage import label, binary_dilation, binary_closing
+import matplotlib.pyplot as plt
 
 from contants import CONVERSION_MATRIX, EPSILON
+from scipy.ndimage import gaussian_filter
 
 DEBUG = True
 
@@ -10,6 +13,73 @@ DEBUG = True
 def stretch(im: np.ndarray):
     return (im - np.min(im)) / np.ptp(im)
 
+def fill_holes(arr: np.ndarray, mask: np.ndarray, hole_percentage_threshold=0.001):
+    """
+    Taken from https://stackoverflow.com/questions/41550979/fill-holes-with-majority-of-surrounding-values-python
+    :param arr:
+    :return:
+    """
+    output = np.copy(arr)
+
+
+    color_sampler = np.stack([gaussian_filter(arr[..., channel], sigma=10) for channel in range(3)], axis=2)
+    if DEBUG:
+        plt.imshow(color_sampler)
+        plt.show()
+
+    labels, count = label(mask)
+    for idx in range(1, count + 1):
+        hole = labels == idx
+        is_hole_too_small = np.sum(hole)/hole.size < hole_percentage_threshold
+        if is_hole_too_small:
+            continue
+        hole_edges = binary_dilation(hole, iterations=50) & ~binary_dilation(hole, iterations=40) & ~mask
+        if DEBUG:
+            plt.imshow(np.squeeze(hole_edges.astype(np.float)))
+            plt.show()
+
+        most_common_color = get_most_common_color(color_sampler, hole_edges)
+        blending_mask = gaussian_filter(hole.astype(np.float), sigma=10)
+        if DEBUG:
+            plt.imshow(blending_mask)
+            plt.show()
+        color_mask = most_common_color * np.ones_like(color_sampler)
+        output = color_mask * blending_mask[..., np.newaxis] + output * (1-blending_mask)[..., np.newaxis]
+        # output[blending_mask > 0.00001] = blending_mask[..., np.newaxis] * most_common_color + \
+        #                                   (1 - blending_mask)[blending_mask > 0.00001][..., np.newaxis] * color_sampler[blending_mask > 0.00001]
+        # output[hole] = most_common_color
+
+
+
+    # all_counts = np.zeros(shape=(n_bins,))
+
+        #
+        #     counts, colors = np.histogram(surrounding_values, bins=100)
+        #     color_dists.append(colors)
+        #     best_color_index.append(np.argmax(counts))
+        # best_index = np.max(common_color_index)
+        # output[hole[..., channel]] = most_common_color
+
+    return output
+
+def get_most_common_color(arr, mask=None, blurred=False):
+    if not blurred:
+        color_sampler = np.stack([gaussian_filter(arr[..., channel], sigma=10) for channel in range(3)], axis=2)
+    else:
+        color_sampler = arr
+    if mask is not None:
+        color_sampler = color_sampler[mask]
+    n_bins_3d = 4
+    hist_3d, edges = np.histogramdd(color_sampler.reshape(-1, 3),
+                                    bins=[np.linspace(np.min(color_sampler[..., channel]),
+                                                      np.max(color_sampler[..., channel]),
+                                                      n_bins_3d) for channel in range(3)])
+    if DEBUG:
+        histogram3dplot(hist_3d, edges)
+        plt.show()
+    indexes = np.unravel_index(np.argmax(hist_3d, axis=None), hist_3d.shape)
+    most_common_color = np.array([e[i] for i, e in zip(indexes, edges)]).reshape((1, 1, 3))
+    return most_common_color
 
 def chromaticity_to_vector(chromaticity: np.ndarray):
     """
@@ -94,3 +164,46 @@ def open_raw(path):
         # rgb = raw.postprocess()
         raw_image = raw.raw_image.copy()
         return raw_image
+
+
+def histogram3dplot(h, e, fig=None):
+    """
+    Visualize a 3D histogram
+
+    Parameters
+    ----------
+
+    h: histogram array of shape (M,N,O)
+    e: list of bin edge arrays (for R, G and B)
+    """
+    M, N, O = h.shape
+    idxR = np.arange(M)
+    idxG = np.arange(N)
+    idxB = np.arange(O)
+
+    R, G, B = np.meshgrid(idxR, idxG, idxB)
+    a = np.diff(e[0])[0]
+    b = a/2
+    R = a * R + b
+
+    a = np.diff(e[1])[0]
+    b = a/2
+    G = a * G + b
+
+    a = np.diff(e[2])[0]
+    b = a/2
+    B = a * B + b
+
+    colors = np.vstack((R.flatten(), G.flatten(), B.flatten())).T/255
+    h = h / np.sum(h)
+    if fig is not None:
+        f = plt.figure(fig)
+    else:
+        f = plt.gcf()
+    ax = f.add_subplot(111, projection='3d')
+    mxbins = np.array([M,N,O]).max()
+    ax.scatter(R.flatten(), G.flatten(), B.flatten(), s=h.flatten()*(256/mxbins)**3/2, c=colors)
+
+    ax.set_xlabel('Red')
+    ax.set_ylabel('Green')
+    ax.set_zlabel('Blue')
