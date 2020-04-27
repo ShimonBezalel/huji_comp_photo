@@ -1,10 +1,11 @@
 import numpy as np
 import rawpy
 import imageio
+from medpy.filter import anisotropic_diffusion
 from scipy.ndimage import label, binary_dilation, binary_closing
 import matplotlib.pyplot as plt
 
-from contants import CONVERSION_MATRIX, EPSILON
+from contants import CONVERSION_MATRIX, EPSILON, INTENSITY_METHOD, DIFFERENCE_THRESHOLD
 from scipy.ndimage import gaussian_filter
 
 DEBUG = True
@@ -13,54 +14,67 @@ DEBUG = True
 def stretch(im: np.ndarray):
     return (im - np.min(im)) / np.ptp(im)
 
-def fill_holes(arr: np.ndarray, mask: np.ndarray, hole_percentage_threshold=0.001):
+def image_intensities(im:np.ndarray, method:INTENSITY_METHOD=INTENSITY_METHOD.NORM.L2):
+    """
+
+    :param im:
+    :param method: Methods relying on norms. Options are [0, 1, 2, np.inf]
+    :return:
+    """
+    # Reduce dimension to attempt to find intensity only
+    norm_method = int(method.value) if method.value != np.inf else np.inf
+    intensities_flash = np.linalg.norm(im, ord=norm_method, axis=2, keepdims=True)
+    intensities_flash = stretch(intensities_flash)
+
+    # Assume light intensity is continuous, so smooth but retain features.
+    # Done using a anisotropic diffusion - a technique aiming at reducing image noise without removing significant
+    # parts of the image content. https://en.wikipedia.org/wiki/Anisotropic_diffusion
+    intensities_smoothed = anisotropic_diffusion(intensities_flash)
+
+    return intensities_smoothed
+
+def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray, hole_size_threshold=0.0001):
     """
     Taken from https://stackoverflow.com/questions/41550979/fill-holes-with-majority-of-surrounding-values-python
     :param arr:
     :return:
     """
     output = np.copy(arr)
-
-
-    color_sampler = np.stack([gaussian_filter(arr[..., channel], sigma=10) for channel in range(3)], axis=2)
-    if DEBUG:
-        plt.imshow(color_sampler)
-        plt.show()
-
+    mask = np.squeeze(mask)
     labels, count = label(mask)
-    for idx in range(1, count + 1):
-        hole = labels == idx
-        is_hole_too_small = np.sum(hole)/hole.size < hole_percentage_threshold
-        if is_hole_too_small:
+
+    hole_sizes = np.bincount(labels.ravel())
+    relevant_hole_indexes = np.where(hole_sizes / mask.size > hole_size_threshold)[0] + 1
+    done = 0
+    ignored = 0
+    print("Count: {}, relevant {}".format(count, len(relevant_hole_indexes)))
+
+    for hole_label in relevant_hole_indexes:
+        hole = labels == hole_label
+        hole = np.squeeze(hole)
+        average_color = np.mean(spatial_color_map[hole], axis=0)
+
+        sample_size = 10000
+        sample_mask = stretch(np.random.uniform(size=spatial_color_map.shape[:2]) + mask.astype(np.float)) \
+                      < (sample_size / (spatial_color_map.size - np.sum(mask)))
+
+        sample_colors = spatial_color_map[sample_mask]
+
+        color_differences = np.linalg.norm(np.squeeze(np.abs(sample_colors - average_color)), axis=-1)
+
+        if np.min(color_differences) > DIFFERENCE_THRESHOLD:
+            print("bad color {} - {}".format(hole_sizes[hole_label - 1], np.min(color_differences)))
+            ignored += 1
             continue
-        hole_edges = binary_dilation(hole, iterations=50) & ~binary_dilation(hole, iterations=40) & ~mask
-        if DEBUG:
-            plt.imshow(np.squeeze(hole_edges.astype(np.float)))
-            plt.show()
 
-        most_common_color = get_most_common_color(color_sampler, hole_edges)
-        blending_mask = gaussian_filter(hole.astype(np.float), sigma=10)
-        if DEBUG:
-            plt.imshow(blending_mask)
-            plt.show()
-        color_mask = most_common_color * np.ones_like(color_sampler)
-        output = color_mask * blending_mask[..., np.newaxis] + output * (1-blending_mask)[..., np.newaxis]
-        # output[blending_mask > 0.00001] = blending_mask[..., np.newaxis] * most_common_color + \
-        #                                   (1 - blending_mask)[blending_mask > 0.00001][..., np.newaxis] * color_sampler[blending_mask > 0.00001]
-        # output[hole] = most_common_color
-
-
-
-    # all_counts = np.zeros(shape=(n_bins,))
-
-        #
-        #     counts, colors = np.histogram(surrounding_values, bins=100)
-        #     color_dists.append(colors)
-        #     best_color_index.append(np.argmax(counts))
-        # best_index = np.max(common_color_index)
-        # output[hole[..., channel]] = most_common_color
-
+        most_similar_pixel = np.argmin(color_differences)
+        sampled_color = arr[sample_mask][most_similar_pixel]
+        output[hole] = sampled_color
+        done += 1
+    print("Done: {}".format(done))
+    print("Ignored: {}".format(ignored))
     return output
+
 
 def get_most_common_color(arr, mask=None, blurred=False):
     if not blurred:
@@ -145,8 +159,6 @@ def calculate_chromaticity(im):
     unit_vec = np.array([1, 1, 1])
     projection_vec = unit_vec * np.dot(mean, unit_vec) / np.dot(unit_vec, unit_vec)
     chromaticity = mean / projection_vec
-    if DEBUG:
-        print("calculated chromaticity: {}".format(chromaticity))
     return vector_to_chromaticity(chromaticity)
 
 
@@ -164,6 +176,33 @@ def open_raw(path):
         # rgb = raw.postprocess()
         raw_image = raw.raw_image.copy()
         return raw_image
+
+def generate_percentage_mask(intensities, percentage=0.01, smoothing_sigma=None, segmente=None):
+    """
+
+    :param intensities:
+    :param percentage:
+    :param smoothing_sigma:
+    :param segmente:
+    :return:
+    """
+    hist, bins = np.histogram(intensities, bins=255)
+    normalized_cum_sum = np.cumsum(np.flip(hist)) / intensities.size
+    intensity_threshold = np.flip(bins)[np.argmax(np.where(normalized_cum_sum < percentage))]
+    print(intensity_threshold)
+    mask = np.array(intensities >= intensity_threshold).astype(np.float64)
+
+    should_smooth = smoothing_sigma != None
+    if should_smooth:
+        smooth_mask = gaussian_filter(mask, sigma=smoothing_sigma)
+        mask = smooth_mask > 0.001
+
+    if segmente:
+        mask[::segmente, ...] = False
+        mask[::, ::segmente, ...] = False
+
+    return mask
+
 
 
 def histogram3dplot(h, e, fig=None):
