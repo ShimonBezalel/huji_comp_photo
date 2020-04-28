@@ -5,16 +5,21 @@ from medpy.filter import anisotropic_diffusion
 from scipy.ndimage import label, binary_dilation, binary_closing
 import matplotlib.pyplot as plt
 
-from contants import CONVERSION_MATRIX, EPSILON, INTENSITY_METHOD, DIFFERENCE_THRESHOLD
+from contants import CONVERSION_MATRIX, EPSILON, INTENSITY_METHOD, DELTA_THRESHOLD
 from scipy.ndimage import gaussian_filter
 
 DEBUG = True
 
 
-def stretch(im: np.ndarray):
+def normalize(im: np.ndarray):
     return (im - np.min(im)) / np.ptp(im)
 
-def image_intensities(im:np.ndarray, method:INTENSITY_METHOD=INTENSITY_METHOD.NORM.L2):
+
+def linear(value, minimum, maximum):
+    return (maximum - minimum) * value + minimum
+
+
+def image_intensities(im: np.ndarray, method: INTENSITY_METHOD = INTENSITY_METHOD.NORM.L2):
     """
 
     :param im:
@@ -24,7 +29,7 @@ def image_intensities(im:np.ndarray, method:INTENSITY_METHOD=INTENSITY_METHOD.NO
     # Reduce dimension to attempt to find intensity only
     norm_method = int(method.value) if method.value != np.inf else np.inf
     intensities_flash = np.linalg.norm(im, ord=norm_method, axis=2, keepdims=True)
-    intensities_flash = stretch(intensities_flash)
+    intensities_flash = normalize(intensities_flash)
 
     # Assume light intensity is continuous, so smooth but retain features.
     # Done using a anisotropic diffusion - a technique aiming at reducing image noise without removing significant
@@ -33,36 +38,36 @@ def image_intensities(im:np.ndarray, method:INTENSITY_METHOD=INTENSITY_METHOD.NO
 
     return intensities_smoothed
 
-def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray, hole_size_threshold=0.0001):
+
+def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray, hole_size_threshold=0.001):
     """
-    Taken from https://stackoverflow.com/questions/41550979/fill-holes-with-majority-of-surrounding-values-python
+
     :param arr:
+    :param mask:
+    :param spatial_color_map:
+    :param hole_size_threshold:
     :return:
     """
     output = np.copy(arr)
     mask = np.squeeze(mask)
     labels, count = label(mask)
-
-    hole_sizes = np.bincount(labels.ravel())
-    relevant_hole_indexes = np.where(hole_sizes / mask.size > hole_size_threshold)[0] + 1
+    sample_size = 0.01 * mask.size  # Roughly 1% of pixels are sampled
+    sample_mask = normalize(np.random.uniform(size=spatial_color_map.shape[:2]) + mask.astype(np.float)) < \
+                  (sample_size / (spatial_color_map.size - np.sum(mask)))
+    sample_colors = spatial_color_map[sample_mask]
+    hole_sizes = np.bincount(labels.ravel())[1:]  # 0's are ignored
+    relevant_hole_indexes = np.where((hole_sizes / mask.size) > hole_size_threshold)[0] + 1
     done = 0
     ignored = 0
     print("Count: {}, relevant {}".format(count, len(relevant_hole_indexes)))
-
+    all_holes = np.zeros_like(arr)
     for hole_label in relevant_hole_indexes:
         hole = labels == hole_label
         hole = np.squeeze(hole)
         average_color = np.mean(spatial_color_map[hole], axis=0)
-
-        sample_size = 10000
-        sample_mask = stretch(np.random.uniform(size=spatial_color_map.shape[:2]) + mask.astype(np.float)) \
-                      < (sample_size / (spatial_color_map.size - np.sum(mask)))
-
-        sample_colors = spatial_color_map[sample_mask]
-
-        color_differences = np.linalg.norm(np.squeeze(np.abs(sample_colors - average_color)), axis=-1)
-
-        if np.min(color_differences) > DIFFERENCE_THRESHOLD:
+        color_differences = np.linalg.norm(sample_colors - average_color, axis=-1)
+        smallest_delta = np.min(color_differences)
+        if smallest_delta > DELTA_THRESHOLD:
             print("bad color {} - {}".format(hole_sizes[hole_label - 1], np.min(color_differences)))
             ignored += 1
             continue
@@ -70,7 +75,10 @@ def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray,
         most_similar_pixel = np.argmin(color_differences)
         sampled_color = arr[sample_mask][most_similar_pixel]
         output[hole] = sampled_color
+        all_holes[hole] = sampled_color
         done += 1
+    plt.imshow(all_holes)
+    plt.show()
     print("Done: {}".format(done))
     print("Ignored: {}".format(ignored))
     return output
@@ -95,12 +103,15 @@ def get_most_common_color(arr, mask=None, blurred=False):
     most_common_color = np.array([e[i] for i, e in zip(indexes, edges)]).reshape((1, 1, 3))
     return most_common_color
 
+
 def chromaticity_to_vector(chromaticity: np.ndarray):
     """
     Return a vector of 3 channel color from chromaticity
     :param chromaticity: [x, y] a vector on length 2
     :return: [x, y, 1] of length 3
     """
+    assert chromaticity.size == 2
+    assert chromaticity.shape in [(2,), (2, 1)]
     return np.append(chromaticity, 1)
 
 
@@ -120,7 +131,7 @@ def vector_to_chromaticity(vec: np.ndarray):
 
 def xyz_from_xy(x, y):
     """Return the vector (x, y, 1-x-y)."""
-    return np.array((x, y, 1-x-y))
+    return np.array((x, y, 1 - x - y))
 
 
 def xyz_to_lms(im: np.ndarray):
@@ -154,7 +165,7 @@ def calculate_chromaticity(im):
     shape = im.shape
     x, y = shape[0] // 2, shape[1] // 2
     patch_radius = 4
-    center_patch = im[x - patch_radius : x + patch_radius, y - patch_radius : y + patch_radius, :]
+    center_patch = im[x - patch_radius: x + patch_radius, y - patch_radius: y + patch_radius, :]
     mean = center_patch.mean(axis=(0, 1))
     unit_vec = np.array([1, 1, 1])
     projection_vec = unit_vec * np.dot(mean, unit_vec) / np.dot(unit_vec, unit_vec)
@@ -176,6 +187,7 @@ def open_raw(path):
         # rgb = raw.postprocess()
         raw_image = raw.raw_image.copy()
         return raw_image
+
 
 def generate_percentage_mask(intensities, percentage=0.01, smoothing_sigma=None, segmente=None):
     """
@@ -204,7 +216,6 @@ def generate_percentage_mask(intensities, percentage=0.01, smoothing_sigma=None,
     return mask
 
 
-
 def histogram3dplot(h, e, fig=None):
     """
     Visualize a 3D histogram
@@ -222,26 +233,26 @@ def histogram3dplot(h, e, fig=None):
 
     R, G, B = np.meshgrid(idxR, idxG, idxB)
     a = np.diff(e[0])[0]
-    b = a/2
+    b = a / 2
     R = a * R + b
 
     a = np.diff(e[1])[0]
-    b = a/2
+    b = a / 2
     G = a * G + b
 
     a = np.diff(e[2])[0]
-    b = a/2
+    b = a / 2
     B = a * B + b
 
-    colors = np.vstack((R.flatten(), G.flatten(), B.flatten())).T/255
+    colors = np.vstack((R.flatten(), G.flatten(), B.flatten())).T / 255
     h = h / np.sum(h)
     if fig is not None:
         f = plt.figure(fig)
     else:
         f = plt.gcf()
     ax = f.add_subplot(111, projection='3d')
-    mxbins = np.array([M,N,O]).max()
-    ax.scatter(R.flatten(), G.flatten(), B.flatten(), s=h.flatten()*(256/mxbins)**3/2, c=colors)
+    mxbins = np.array([M, N, O]).max()
+    ax.scatter(R.flatten(), G.flatten(), B.flatten(), s=h.flatten() * (256 / mxbins) ** 3 / 2, c=colors)
 
     ax.set_xlabel('Red')
     ax.set_ylabel('Green')

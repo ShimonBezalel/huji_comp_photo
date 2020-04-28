@@ -1,13 +1,37 @@
 import numpy as np
 import enum
 
-NO_CHROMATICITY = np.array((1, 1))
+#  Image processing
+# -------------------------------------------------
+GRAY_CHROMATICITY = np.ones((2,))
 
+DELTA_THRESHOLD = 0.005
+
+BRIGHTNESS_MIN = 0.5
+BRIGHTNESS_MAX = 1.5
+
+SATURATION_MIN = 0.4
+SATURATION_MAX = 4
+
+
+# Math
+# -------------------------------------------------
 EPSILON = 0.00001
 
-DIFFERENCE_THRESHOLD = 0.005
+# Error Messages
+# -------------------------------------------------
+ERROR_MSG_PERCENTAGE = """
+Flash and Shadow region percentages must be values between 0 and 1. 
+For example: flash_region=0.01 means 1% of the provided flash image is estimated to be reflective burns.
+"""
 
+ERROR_MSG_PARAMETERS = """
+Flash and Shadow region percentages must be values between 0 and 1. 
+For example: flash_region=0.01 means 1% of the provided flash image is estimated to be reflective burns.
+"""
 
+# Algorithms
+# -------------------------------------------------
 class INTENSITY_METHOD(enum.Enum):
     @staticmethod
     class NORM(enum.Enum):
