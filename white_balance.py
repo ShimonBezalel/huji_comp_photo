@@ -96,22 +96,23 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
 
 
 def run():
-    im_name = "im2_"
+    im_name = ""
     base_path = path.join('input', 'input-tiff')
-    im_ext = ".JPG"
+    im_ext = ".tiff"
 
     path_noflash_image = path.join(base_path, "{}noflash{}".format(im_name, im_ext))
     path_withflash_image = path.join(base_path, "{}withflash{}".format(im_name, im_ext))
     path_graycard_image = path.join(base_path, "{}graycard{}".format(im_name, im_ext))
 
-    im_graycard = img_as_float(imageio.imread(path_graycard_image))
-    im_noflash = img_as_float(imageio.imread(path_noflash_image))
-    im_withflash = img_as_float(imageio.imread(path_withflash_image))
+    im_graycard = img_as_float(read_image_as_lms(path_graycard_image))
+    im_noflash = img_as_float(read_image_as_lms(path_noflash_image))
+    im_withflash = img_as_float(read_image_as_lms(path_withflash_image))
 
     chromaticity = calculate_chromaticity(normalize(im_graycard))
 
     res = correct_white_balance(normalize(im_noflash), normalize(im_withflash), flash_chromaticity=chromaticity)
-    plt.imshow(res)
+    res_rgb = lms_to_rgb(res)
+    plt.imshow(res_rgb)
     plt.show()
 
 
