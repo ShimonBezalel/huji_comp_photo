@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from os import path
 
-from contants import *
+from constants import *
 from image_utils import *
 
 from skimage import img_as_float
@@ -11,6 +11,7 @@ from scipy.ndimage import gaussian_filter
 from skimage.feature import canny
 
 from medpy.filter.smoothing import anisotropic_diffusion
+import cv2
 
 DEBUG = True
 
