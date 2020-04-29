@@ -252,3 +252,17 @@ def histogram3dplot(h, e, fig=None):
     ax.set_xlabel('Red')
     ax.set_ylabel('Green')
     ax.set_zlabel('Blue')
+
+
+def read_image_as_lms(path):
+	"""reads image from path and returns it in lms format"""
+	im = cv2.imread(path)
+	rgb = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+	xyz = rgb2xyz(rgb)
+	return xyz_to_lms(xyz)
+
+
+def lms_to_rgb(im):
+	"""converts image from lms to rgb format"""
+	xyz = lms_to_xyz(im)
+	return cv2.cvtColor(xyz, cv2.COLOR_XYZ2RGB)
