@@ -119,9 +119,9 @@ def vector_to_chromaticity(vec: np.ndarray):
     normalized: np.ndarray = (v / v[2])
     return normalized[:2]
 
+
 def rgb2xyz(img):
     return cv2.cvtColor(img, cv2.COLOR_RGB2XYZ)
-
 
 
 def xyz_from_xy(x, y):
@@ -135,8 +135,9 @@ def xyz_to_lms(im: np.ndarray):
     :param im: np.ndarray of shape m X n X 3 color channels
     :return:
     """
-    lms = np.matmul(im, CONVERSION_MATRIX.HPE.value)
+    lms = np.matmul(im, CONVERSION_MATRIX.XYZ_TO_LMS.HPE.value)
     return lms
+
 
 def lms_to_xyz(im: np.ndarray):
     """
@@ -145,8 +146,8 @@ def lms_to_xyz(im: np.ndarray):
     :return:
     """
 
-    HPE_inv = np.linalg.inv(CONVERSION_MATRIX.HPE.value)
-    lms = np.matmul( im, HPE_inv)
+    HPE_inv = np.linalg.inv(CONVERSION_MATRIX.XYZ_TO_LMS.HPE.value)
+    lms = np.matmul(im, HPE_inv)
     return lms.astype(np.uint8)
 
 
@@ -255,14 +256,18 @@ def histogram3dplot(h, e, fig=None):
 
 
 def read_image_as_lms(path):
-	"""reads image from path and returns it in lms format"""
-	im = cv2.imread(path)
-	rgb = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-	xyz = rgb2xyz(rgb)
-	return xyz_to_lms(xyz)
+    """
+	reads image from path and returns it in lms format
+	:param path:
+	:return:
+	"""
+    im = cv2.imread(path)
+    rgb = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    xyz = rgb2xyz(rgb)
+    return xyz_to_lms(xyz)
 
 
 def lms_to_rgb(im):
-	"""converts image from lms to rgb format"""
-	xyz = lms_to_xyz(im)
-	return cv2.cvtColor(xyz, cv2.COLOR_XYZ2RGB)
+    """converts image from lms to rgb format"""
+    xyz = lms_to_xyz(im)
+    return cv2.cvtColor(xyz, cv2.COLOR_XYZ2RGB)

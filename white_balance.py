@@ -94,7 +94,8 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
 
 def run(**kwargs):
     im_noflash, im_withflash, im_graycard = (
-        img_as_float(imageio.imread(kwargs["image_path_{}".format(suffix.value)]))
+        read_image_as_lms(kwargs["image_path_{}".format(suffix.value)])
+        # img_as_float(imageio.imread(kwargs["image_path_{}".format(suffix.value)]))
         for suffix in IMAGE_SUFFIX
     )
 
@@ -103,13 +104,16 @@ def run(**kwargs):
     res = correct_white_balance(normalize(im_noflash), normalize(im_withflash), flash_chromaticity=chromaticity,
                                 saturation=kwargs["saturation"], brightness=kwargs["brightness"],
                                 shadow_regions=kwargs["shadow_regions"], flash_regions=kwargs["flash_regions"])
-    plt.imshow(im_noflash)
+
+    orig = normalize(lms_to_rgb(im_noflash))
+    result = normalize(lms_to_rgb(res))
+    plt.imshow(np.squeeze(normalize(orig)))
     plt.show()
-    plt.imshow(im_noflash ** 0.3)
+    plt.imshow(orig ** 0.3)
     plt.show()
-    plt.imshow(res)
+    plt.imshow(result)
     plt.show()
-    plt.imshow(res ** 0.3)
+    plt.imshow(result ** 0.3)
     plt.show()
 
 
@@ -118,7 +122,7 @@ def parse_args():
     Given two images of identical scenes, perform a white-balance improvement on the no-flash image,
     using the flash's chromaticity. The two images must be taken using manual settings, so that only
     the flash acts as a controlled difference between them.""")
-    parser.add_argument("-p", "--path", default="input/input-tiff/im2_withflash.JPG", dest="full_path")
+    parser.add_argument("-p", "--path", default="input/input-tiff/", dest="full_path")
     parser.add_argument("-fp", "--flash", default=PERCENT_FLASH_DEFAULT, dest="flash_regions", type=float)
     parser.add_argument("-sp", "--shadow", default=PERCENT_SHADOW_DEFAULT, dest="shadow_regions", type=float)
     parser.add_argument("-b", "--brightness", default=BRIGHTNESS_DEFAULT, dest="brightness", type=float, help="""

@@ -74,6 +74,7 @@ class INTENSITY_METHOD(enum.Enum):
 
 
 class CONVERSION_MATRIX(enum.Enum):
+    @staticmethod
     class XYZ_TO_LMS(enum.Enum):
 
         # Hunt-Pinter-Estevez P.19 https://moodle2.cs.huji.ac.il/nu19/pluginfile.php/482566/mod_resource/content/0
