@@ -7,12 +7,9 @@ from constants import *
 from image_utils import *
 
 from skimage import img_as_float
-from skimage.filters import gaussian
-from scipy.ndimage import gaussian_filter
 from skimage.feature import canny
 
 from medpy.filter.smoothing import anisotropic_diffusion
-import cv2
 
 DEBUG = True
 
@@ -117,12 +114,24 @@ def run(**kwargs):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='White Balance from two images, flash and no flash.')
+    parser = argparse.ArgumentParser(description="""White Balance from two images, flash and no flash. 
+    Given two images of identical scenes, perform a white-balance improvement on the no-flash image,
+    using the flash's chromaticity. The two images must be taken using manual settings, so that only
+    the flash acts as a controlled difference between them.""")
     parser.add_argument("-p", "--path", default="input/input-tiff/im2_withflash.JPG", dest="full_path")
     parser.add_argument("-fp", "--flash", default=PERCENT_FLASH_DEFAULT, dest="flash_regions", type=float)
     parser.add_argument("-sp", "--shadow", default=PERCENT_SHADOW_DEFAULT, dest="shadow_regions", type=float)
-    parser.add_argument("-b", "--brightness", default=BRIGHTNESS_DEFAULT, dest="brightness", type=float)
-    parser.add_argument("-s", "--saturation", default=SATURATION_DEFAULT, dest="saturation", type=float)
+    parser.add_argument("-b", "--brightness", default=BRIGHTNESS_DEFAULT, dest="brightness", type=float, help="""
+    Optional control over brightness. Defaults to {}
+    Takes values from 0 (dark) to 1 (light), with input of 0.5 for no effect.
+    Note that a balance between this parameter and saturation  can lead to better results and obscure errors.
+    """.format(BRIGHTNESS_DEFAULT))
+    parser.add_argument("-s", "--saturation", default=SATURATION_DEFAULT, dest="saturation", type=float, help="""
+    Optional control over saturation. Defaults to {}
+    Takes values from 0 (pale) to 1 (vivid), with input of 0.5 for no effect.
+    Note that a balance between this parameter and brightness can lead to better results and obscure errors.
+    How strong should the colors come through after white balance correction?
+    """.format(SATURATION_DEFAULT))
     parser.add_argument("-o", "--out_path", default=".", dest="out_path", type=str)
 
     ns = parser.parse_args()
