@@ -57,9 +57,6 @@ def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray,
     sample_colors = spatial_color_map[sample_mask]
     hole_sizes = np.bincount(labels.ravel())[1:]  # 0's are ignored
     relevant_hole_indexes = np.where((hole_sizes / mask.size) > hole_size_threshold)[0] + 1
-    done = 0
-    ignored = 0
-    print("Count: {}, relevant {}".format(count, len(relevant_hole_indexes)))
     all_holes = np.zeros_like(arr)
     for hole_label in relevant_hole_indexes:
         hole = labels == hole_label
@@ -68,19 +65,12 @@ def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray,
         color_differences = np.linalg.norm(sample_colors - average_color, axis=-1)
         smallest_delta = np.min(color_differences)
         if smallest_delta > DELTA_THRESHOLD:
-            print("bad color {} - {}".format(hole_sizes[hole_label - 1], np.min(color_differences)))
-            ignored += 1
             continue
 
         most_similar_pixel = np.argmin(color_differences)
         sampled_color = arr[sample_mask][most_similar_pixel]
         output[hole] = sampled_color
         all_holes[hole] = sampled_color
-        done += 1
-    plt.imshow(all_holes)
-    plt.show()
-    print("Done: {}".format(done))
-    print("Ignored: {}".format(ignored))
     return output
 
 
@@ -201,7 +191,6 @@ def generate_percentage_mask(intensities, percentage=0.01, smoothing_sigma=None,
     hist, bins = np.histogram(intensities, bins=255)
     normalized_cum_sum = np.cumsum(np.flip(hist)) / intensities.size
     intensity_threshold = np.flip(bins)[np.argmax(np.where(normalized_cum_sum < percentage))]
-    print(intensity_threshold)
     mask = np.array(intensities >= intensity_threshold).astype(np.float64)
 
     should_smooth = smoothing_sigma != None
