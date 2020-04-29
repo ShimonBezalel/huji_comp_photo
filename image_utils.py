@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import rawpy
 import imageio
@@ -5,7 +6,7 @@ from medpy.filter import anisotropic_diffusion
 from scipy.ndimage import label, binary_dilation, binary_closing
 import matplotlib.pyplot as plt
 
-from contants import CONVERSION_MATRIX, EPSILON, INTENSITY_METHOD, DELTA_THRESHOLD
+from constants import CONVERSION_MATRIX, EPSILON, INTENSITY_METHOD, DELTA_THRESHOLD
 from scipy.ndimage import gaussian_filter
 
 DEBUG = True
@@ -118,6 +119,10 @@ def vector_to_chromaticity(vec: np.ndarray):
     normalized: np.ndarray = (v / v[2])
     return normalized[:2]
 
+def rgb2xyz(img):
+    return cv2.cvtColor(img, cv2.COLOR_RGB2XYZ)
+
+
 
 def xyz_from_xy(x, y):
     """Return the vector (x, y, 1-x-y)."""
@@ -130,18 +135,19 @@ def xyz_to_lms(im: np.ndarray):
     :param im: np.ndarray of shape m X n X 3 color channels
     :return:
     """
-    lms = im.dot(CONVERSION_MATRIX.XYZ_TO_LMS.HPE)
+    lms = np.matmul(im, CONVERSION_MATRIX.HPE.value)
+    return lms
 
-
-def xyz_to_lms(im: np.ndarray):
+def lms_to_xyz(im: np.ndarray):
     """
     Converts a given images from XYZ format to LMS format, using Hunt-Pointer-Estevez
     :param im: np.ndarray of shape m X n X 3 color channels
     :return:
     """
-    lms = im.dot(CONVERSION_MATRIX.XYZ_TO_LMS.HPE)
 
-    raise Exception("not implemented")
+    HPE_inv = np.linalg.inv(CONVERSION_MATRIX.HPE.value)
+    lms = np.matmul( im, HPE_inv)
+    return lms.astype(np.uint8)
 
 
 def calculate_chromaticity(im):
