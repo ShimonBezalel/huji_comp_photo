@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from os import path
+import argparse
 
 from constants import *
 from image_utils import *
@@ -16,10 +17,11 @@ import cv2
 DEBUG = True
 
 
+
 def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
                           flash_chromaticity: np.ndarray = GRAY_CHROMATICITY,
-                          flash_regions=0.01, shadow_regions=0.15,
-                          brightness=0.6, saturation=0.7):
+                          flash_regions: float = PERCENT_FLASH_DEFAULT, shadow_regions: float = PERCENT_SHADOW_DEFAULT,
+                          brightness: float = BRIGHTNESS_DEFAULT, saturation: float = SATURATION_DEFAULT):
     """
     Given two images of identical scenes, perform a white-balance improvement on the no-flash image,
     using the flash's chromaticity. The two images must be taken using manual settings, so that only
@@ -47,9 +49,6 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
 
     :return:
     """
-    assert np.all([0 < percentage < 1 for percentage in [flash_regions, shadow_regions]]), ERROR_MSG_PERCENTAGE
-    assert np.all([0 < param < 1 for param in [brightness, saturation]]), ERROR_MSG_PARAMETERS
-
     # 1. Subtract no-flash image from flash image. Result holds D_p = R_p*k_p*C_f
     diff: np.ndarray = (im_flash - im_no_flash)
 
@@ -72,8 +71,8 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
     # 3.4 Estimate hole regions in R by creating a mask from flash burns and shadows, and then correct chromatically
     # 3.4.1 Errors are light and shadowy regions that are the difference of the two images
     error_intensities: np.ndarray = normalize(flash_intensities - light_source_intensities)
-    flash_specular_mask = generate_percentage_mask(error_intensities, percentage=0.01, smoothing_sigma=1)
-    shadow_area_mask = generate_percentage_mask((1 - error_intensities), percentage=0.15, smoothing_sigma=1)
+    flash_specular_mask = generate_percentage_mask(error_intensities, percentage=flash_regions, smoothing_sigma=1)
+    shadow_area_mask = generate_percentage_mask((1 - error_intensities), percentage=shadow_regions, smoothing_sigma=1)
 
     # 3.4.2 Canny object edge detection. The mask must respect the edges of the objects in
     # order to correct for each separately.
@@ -92,29 +91,67 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
     saturation_exp = linear(2 * saturation - 1, 1, SATURATION_MAX) if saturation > 0.5 \
         else linear(2 * saturation, SATURATION_MIN, 1)
     wb_im = (light_source_intensities ** brightness_exp) * (R ** saturation_exp)
+
     return wb_im
 
 
-def run():
-    im_name = ""
-    base_path = path.join('input', 'input-tiff')
-    im_ext = ".tiff"
-
-    path_noflash_image = path.join(base_path, "{}noflash{}".format(im_name, im_ext))
-    path_withflash_image = path.join(base_path, "{}withflash{}".format(im_name, im_ext))
-    path_graycard_image = path.join(base_path, "{}graycard{}".format(im_name, im_ext))
-
-    im_graycard = img_as_float(read_image_as_lms(path_graycard_image))
-    im_noflash = img_as_float(read_image_as_lms(path_noflash_image))
-    im_withflash = img_as_float(read_image_as_lms(path_withflash_image))
+def run(**kwargs):
+    im_noflash, im_withflash, im_graycard = (
+        img_as_float(imageio.imread(kwargs["image_path_{}".format(suffix.value)]))
+        for suffix in IMAGE_SUFFIX
+    )
 
     chromaticity = calculate_chromaticity(normalize(im_graycard))
 
-    res = correct_white_balance(normalize(im_noflash), normalize(im_withflash), flash_chromaticity=chromaticity)
-    res_rgb = lms_to_rgb(res)
-    plt.imshow(res_rgb)
+    res = correct_white_balance(normalize(im_noflash), normalize(im_withflash), flash_chromaticity=chromaticity,
+                                saturation=kwargs["saturation"], brightness=kwargs["brightness"],
+                                shadow_regions=kwargs["shadow_regions"], flash_regions=kwargs["flash_regions"])
+    plt.imshow(im_noflash)
+    plt.show()
+    plt.imshow(im_noflash ** 0.3)
+    plt.show()
+    plt.imshow(res)
+    plt.show()
+    plt.imshow(res ** 0.3)
     plt.show()
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='White Balance from two images, flash and no flash.')
+    parser.add_argument("-p", "--path", default="input/input-tiff/im2_withflash.JPG", dest="full_path")
+    parser.add_argument("-fp", "--flash", default=PERCENT_FLASH_DEFAULT, dest="flash_regions", type=float)
+    parser.add_argument("-sp", "--shadow", default=PERCENT_SHADOW_DEFAULT, dest="shadow_regions", type=float)
+    parser.add_argument("-b", "--brightness", default=BRIGHTNESS_DEFAULT, dest="brightness", type=float)
+    parser.add_argument("-s", "--saturation", default=SATURATION_DEFAULT, dest="saturation", type=float)
+    parser.add_argument("-o", "--out_path", default=".", dest="out_path", type=str)
+
+    ns = parser.parse_args()
+
+    # Find name of image without suffixes
+    basename = path.basename(ns.full_path)
+    image_path_provided = basename != ''
+    if image_path_provided:
+        assert "." in basename, ERROR_MSG_PATH
+        im_name, im_ext = path.basename(ns.full_path).split(".")
+        for im_type in IMAGE_SUFFIX:
+            im_name = im_name.replace(im_type.value, "")
+    else:  # dir name provided
+        im_name, im_ext = DEFAULT_NAME, DEFAULT_EXT
+
+    image_paths = {
+        "image_path_{}".format(suffix): path.join(path.dirname(ns.full_path), "{}{}.{}".format(im_name, suffix, im_ext))
+        for suffix in [s.value for s in IMAGE_SUFFIX]}
+    for p in image_paths.values():
+        assert path.exists(p), "\n".join(["{} does not exist.".format(p), ERROR_MSG_EXISTS, ERROR_MSG_PATH])
+
+    for val in [ns.flash_regions, ns.shadow_regions]:
+        assert 0 <= val <= 1, ERROR_MSG_PERCENTAGE
+    for val in [ns.saturation, ns.brightness]:
+        assert 0 <= val <= 1, ERROR_MSG_PARAMETERS
+    ret = dict(ns._get_kwargs())
+    ret.update(image_paths)
+    return ret
+
+
 if __name__ == '__main__':
-    run()
+    run(**parse_args())
