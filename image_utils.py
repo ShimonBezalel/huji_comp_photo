@@ -120,10 +120,6 @@ def vector_to_chromaticity(vec: np.ndarray):
     return normalized[:2]
 
 
-def rgb2xyz(img):
-    return cv2.cvtColor(img, cv2.COLOR_RGB2XYZ)
-
-
 def xyz_from_xy(x, y):
     """Return the vector (x, y, 1-x-y)."""
     return np.array((x, y, 1 - x - y))
@@ -135,7 +131,7 @@ def xyz_to_lms(im: np.ndarray):
     :param im: np.ndarray of shape m X n X 3 color channels
     :return:
     """
-    lms = np.matmul(im, CONVERSION_MATRIX.XYZ_TO_LMS.HPE.value)
+    lms = np.matmul(im, CONVERSION_MATRIX.XYZ_TO_LMS.HPE_NORMALIZED.value)
     return lms
 
 
@@ -146,9 +142,9 @@ def lms_to_xyz(im: np.ndarray):
     :return:
     """
 
-    HPE_inv = np.linalg.inv(CONVERSION_MATRIX.XYZ_TO_LMS.HPE.value)
+    HPE_inv = np.linalg.inv(CONVERSION_MATRIX.XYZ_TO_LMS.HPE_NORMALIZED.value)
     lms = np.matmul(im, HPE_inv)
-    return lms.astype(np.uint8)
+    return lms
 
 
 def calculate_chromaticity(im):
@@ -255,19 +251,36 @@ def histogram3dplot(h, e, fig=None):
     ax.set_zlabel('Blue')
 
 
-def read_image_as_lms(path):
+# def read_image_as_lms(path):
+#     """
+# 	reads image from path and returns it in lms format
+# 	:param path:
+# 	:return:
+# 	"""
+#     im = cv2.imread(path)
+#     rgb = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+#     xyz = cv2.cvtColor(rgb, cv2.COLOR_RGB2XYZ) #rgb2xyz(rgb)
+#     return xyz_to_lms(xyz)
+
+def rgb_to_lms(im: np.ndarray):
     """
-	reads image from path and returns it in lms format
+    reads image from path and returns it in lms format
 	:param path:
 	:return:
 	"""
-    im = cv2.imread(path)
-    rgb = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-    xyz = rgb2xyz(rgb)
-    return xyz_to_lms(xyz)
+    im_uint = (im * 255).astype(np.uint16)
+    rgb = cv2.cvtColor(im_uint, cv2.COLOR_BGR2RGB)
+    # rgb = im * 255.0  # cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    xyz = cv2.cvtColor(rgb.astype(np.uint16), cv2.COLOR_RGB2XYZ).astype(np.float64)  # rgb2xyz()
+    return xyz_to_lms(xyz / 255.0)
 
 
 def lms_to_rgb(im):
-    """converts image from lms to rgb format"""
-    xyz = lms_to_xyz(im)
-    return cv2.cvtColor(xyz, cv2.COLOR_XYZ2RGB)
+    """
+    converts image from lms to rgb format
+    @:param im floating point image
+    """
+    xyz: np.ndarray = lms_to_xyz(im)
+    xyz_uint = (255.0 * xyz).astype(np.uint16)
+    res = cv2.cvtColor(xyz_uint, cv2.COLOR_XYZ2RGB)
+    return res.astype(np.float64) / 255.0

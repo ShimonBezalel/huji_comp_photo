@@ -88,33 +88,32 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
     saturation_exp = linear(2 * saturation - 1, 1, SATURATION_MAX) if saturation > 0.5 \
         else linear(2 * saturation, SATURATION_MIN, 1)
     wb_im = (light_source_intensities ** brightness_exp) * (R ** saturation_exp)
-
     return wb_im
 
 
 def run(**kwargs):
     im_noflash, im_withflash, im_graycard = (
-        read_image_as_lms(kwargs["image_path_{}".format(suffix.value)])
-        # img_as_float(imageio.imread(kwargs["image_path_{}".format(suffix.value)]))
+        img_as_float(imageio.imread(kwargs["image_path_{}".format(suffix.value)]))
         for suffix in IMAGE_SUFFIX
     )
 
-    chromaticity = calculate_chromaticity(normalize(im_graycard))
+    chromaticity = calculate_chromaticity(im_graycard)
 
-    res = correct_white_balance(normalize(im_noflash), normalize(im_withflash), flash_chromaticity=chromaticity,
+    res = correct_white_balance(im_noflash, im_withflash, flash_chromaticity=chromaticity,
                                 saturation=kwargs["saturation"], brightness=kwargs["brightness"],
                                 shadow_regions=kwargs["shadow_regions"], flash_regions=kwargs["flash_regions"])
+    if (kwargs["out_path"]):
+        with open(kwargs["out_path"], 'w') as f:
+            plt.imsave(f, res)
+        out_dir, out_basename = path.split(kwargs["out_path"])
 
-    orig = normalize(lms_to_rgb(im_noflash))
-    result = normalize(lms_to_rgb(res))
-    plt.imshow(np.squeeze(normalize(orig)))
-    plt.show()
-    plt.imshow(orig ** 0.3)
-    plt.show()
-    plt.imshow(result)
-    plt.show()
-    plt.imshow(result ** 0.3)
-    plt.show()
+        with open(path.join(out_dir, "gamma_corrected_" + out_basename), 'w') as f:
+            plt.imsave(f, res ** 0.3)
+    else:
+        plt.imshow(res)
+        plt.show()
+        plt.imshow(res ** 0.3)
+        plt.show()
 
 
 def parse_args():
@@ -122,21 +121,49 @@ def parse_args():
     Given two images of identical scenes, perform a white-balance improvement on the no-flash image,
     using the flash's chromaticity. The two images must be taken using manual settings, so that only
     the flash acts as a controlled difference between them.""")
-    parser.add_argument("-p", "--path", default="input/input-tiff/", dest="full_path")
-    parser.add_argument("-fp", "--flash", default=PERCENT_FLASH_DEFAULT, dest="flash_regions", type=float)
-    parser.add_argument("-sp", "--shadow", default=PERCENT_SHADOW_DEFAULT, dest="shadow_regions", type=float)
+
+    parser.add_argument("-p", "--path", default="input/input-tiff/", dest="full_path", help="""
+    Path must be either the name of dir or path to one of the images.
+    If image file path is provided, provide one image path such as im1_{suffix}.JPG. The other two images will follow 
+    the same format - <name><suffix>.<extension>.
+    If path to directory is provided, supply a directory with three images containing the default names:\n{all_suffixes}
+    """.format(suffix=IMAGE_SUFFIX.NO_FLASH.value,
+               all_suffixes=", ".join(["{}{}.{}".format(DEFAULT_NAME, suffix.value, DEFAULT_EXT)
+                                      for suffix in IMAGE_SUFFIX])))
+
+    parser.add_argument("-fp", "--flash", default=PERCENT_FLASH_DEFAULT, dest="flash_regions", type=float, help="""
+    Optional control over estimated spectral flash reflections' percentage of pixels. Defaults to {}, or {}%%.
+     Takes values from 0 (No reflections caused by the cameras flash, such as a open-space scene 
+     or non-reflective materials) to 1 (The entire image is a flash reflection. Not very likely.)
+     Flash regions are normally small, therefore an input of less than 1%%, or 0.01 is reasonable.  
+    """.format(PERCENT_FLASH_DEFAULT, PERCENT_FLASH_DEFAULT * 100))
+
+    parser.add_argument("-sp", "--shadow", default=PERCENT_SHADOW_DEFAULT, dest="shadow_regions", type=float, help="""
+    Optional control over estimated shadow percentage of pixels. Defaults to {}, or {}%%.
+     Takes values from 0 (No shadows caused by the cameras flash, such as a open-space scene with no reflective walls)
+     to 1 (The entire image is a shadow caused by the flash. Not very likely.) Shadowy regions are normally large, 
+     therefore an input of about 20%%, or 0.2 is reasonable for a portrait in confined space, 
+     where the camera's flash is likely to cause shadows.  
+    """.format(PERCENT_SHADOW_DEFAULT, PERCENT_SHADOW_DEFAULT * 100))
+
     parser.add_argument("-b", "--brightness", default=BRIGHTNESS_DEFAULT, dest="brightness", type=float, help="""
-    Optional control over brightness. Defaults to {}
+    Optional control over brightness. Defaults to {}.
     Takes values from 0 (dark) to 1 (light), with input of 0.5 for no effect.
     Note that a balance between this parameter and saturation  can lead to better results and obscure errors.
     """.format(BRIGHTNESS_DEFAULT))
+
     parser.add_argument("-s", "--saturation", default=SATURATION_DEFAULT, dest="saturation", type=float, help="""
-    Optional control over saturation. Defaults to {}
+    Optional control over saturation. Defaults to {}.
     Takes values from 0 (pale) to 1 (vivid), with input of 0.5 for no effect.
     Note that a balance between this parameter and brightness can lead to better results and obscure errors.
     How strong should the colors come through after white balance correction?
     """.format(SATURATION_DEFAULT))
-    parser.add_argument("-o", "--out_path", default=".", dest="out_path", type=str)
+
+    parser.add_argument("-o", "--out_path", default="", dest="out_path", type=str, help="""
+    Optional. Path in which to save result. If not specified, the result will be displayed instead. 
+    Two images are saves, one without post-processing <out_path> and one gamma corrected (brighter) 
+    <out_dir> + gamma_corrected_ <out_basename>
+    """)
 
     ns = parser.parse_args()
 
