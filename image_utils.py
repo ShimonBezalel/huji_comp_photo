@@ -24,10 +24,10 @@ def linear(value, minimum, maximum):
 
 def image_intensities(im: np.ndarray, method: INTENSITY_METHOD = INTENSITY_METHOD.NORM.L2):
     """
-
-    :param im:
+    Calculate intensity channel per 3-channel image.
+    :param im: 3-channel image
     :param method: Methods relying on norms. Options are [0, 1, 2, np.inf]
-    :return:
+    :return: a 2D array of corresponding light intensity.
     """
     # Reduce dimension to attempt to find intensity only
     norm_method = int(method.value) if method.value != np.inf else np.inf
@@ -44,12 +44,13 @@ def image_intensities(im: np.ndarray, method: INTENSITY_METHOD = INTENSITY_METHO
 
 def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray, hole_size_threshold=0.001):
     """
-
-    :param arr:
-    :param mask:
-    :param spatial_color_map:
-    :param hole_size_threshold:
-    :return:
+    Fill in holes represented in mask provided by finding appropriate colors using the spatial color map as a reference.
+    :param arr: Image to correct
+    :param mask: binary mask of hole regions. Consecutive regions are handles seperately
+    :param spatial_color_map: Referance for matching colors. if pixels x and y have similar colors in the
+    spatial_color_map, they are assumed to have the same color in arr.
+    :param hole_size_threshold: How granular the holes should be. The smaller the threshold, the more holes are handled.
+    :return: An array of the same shape of arr, with error regions corrected, if possible.
     """
     output = np.copy(arr)
     mask = np.squeeze(mask)
@@ -78,6 +79,13 @@ def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray,
 
 
 def get_most_common_color(arr, mask=None, blurred=False):
+    """
+    Find most common color appearing in arr using a histogram
+    :param arr:
+    :param mask:
+    :param blurred:
+    :return:
+    """
     if not blurred:
         color_sampler = np.stack([gaussian_filter(arr[..., channel], sigma=10) for channel in range(3)], axis=2)
     else:
@@ -174,23 +182,24 @@ def save_linear_image(im_path):
     imageio.imsave('input/input-tiff/{}.tiff'.format(path.basename(im_path).split(".")[0]), rgb)
 
 
-def open_raw(path):
+def open_raw(im_path):
     """
     Opens a raw image and returns as tiff
     """
-    with rawpy.imread(path) as raw:
+    with rawpy.imread(im_path) as raw:
         # rgb = raw.postprocess()
         raw_image = raw.raw_image.copy()
         return raw_image
 
 
-def generate_percentage_mask(intensities, percentage=0.01, smoothing_sigma=None, segmente=None):
+def generate_percentage_mask(intensities, percentage=0.01, smoothing_sigma=None):
     """
-
-    :param intensities:
-    :param percentage:
-    :param smoothing_sigma:
-    :param segmente:
+    Generate a binary mask with the same shape as intensities array provided, where the mask covers the top
+    percentage of pixels.
+    :param intensities: a 2d array of grayscale intensities
+    :param percentage: how sensitive the mask should be? This is different than a threshold because the
+    percentage will find a relative threshold per image
+    :param smoothing_sigma: the mask will be smoothed using a guassing filter with this sigma, if provided.
     :return:
     """
     hist, bins = np.histogram(intensities, bins=255)
@@ -202,10 +211,6 @@ def generate_percentage_mask(intensities, percentage=0.01, smoothing_sigma=None,
     if should_smooth:
         smooth_mask = gaussian_filter(mask, sigma=smoothing_sigma)
         mask = smooth_mask > 0.001
-
-    if segmente:
-        mask[::segmente, ...] = False
-        mask[::, ::segmente, ...] = False
 
     return mask
 

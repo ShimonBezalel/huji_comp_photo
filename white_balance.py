@@ -1,20 +1,12 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from os import path
+from skimage import img_as_float
+from skimage.feature import canny
+from medpy.filter.smoothing import anisotropic_diffusion
 import argparse
-from pprint import pprint
 
 from constants import *
 from image_utils import *
 
-from skimage import img_as_float
-from skimage.feature import canny
-
-from medpy.filter.smoothing import anisotropic_diffusion
-
-DEBUG = True
-
-
+DEBUG = False
 
 def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
                           flash_chromaticity: np.ndarray = GRAY_CHROMATICITY,
@@ -35,9 +27,9 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
     :param flash_chromaticity: Vector of length 2. The estimated color of the flash. Use the provided utility to measure chromaticity.
     :type flash_chromaticity: np.ndarray of shape (2,) or (2,1)
 
-    The following parameters are given
-    :param shadow_regions:
-    :param flash_regions:
+    The following parameters control how large the regions of flash and cast shadows take up from the image.
+    :param shadow_regions: Percentage of pixels that are shadows.
+    :param flash_regions: Percentage of pixels that are bright flashes.
 
     Control over brightness and saturation.
     Takes values from 0 (dark/pale) to 1 (light/vivid), with input of 0.5 for no affect.
@@ -45,7 +37,7 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
     :param saturation: How strong should the colors come through after white balance correction?
     :param brightness: How bright should the result be?
 
-    :return:
+    :return: The white balanced image corresponding to the image without the flash.
     """
     # 1. Subtract no-flash image from flash image. Result holds D_p = R_p*k_p*C_f
     diff: np.ndarray = (im_flash - im_no_flash)
@@ -103,7 +95,7 @@ def run(**kwargs):
     res = correct_white_balance(im_noflash, im_withflash, flash_chromaticity=chromaticity,
                                 saturation=kwargs["saturation"], brightness=kwargs["brightness"],
                                 shadow_regions=kwargs["shadow_regions"], flash_regions=kwargs["flash_regions"])
-    if (kwargs["out_path"]):
+    if kwargs["out_path"]:
         with open(kwargs["out_path"], 'w') as f:
             plt.imsave(f, res)
         out_dir, out_basename = path.split(kwargs["out_path"])
@@ -196,11 +188,5 @@ def parse_args():
 
 if __name__ == '__main__':
     run(**parse_args())
-    # for p in [
-    #     "input/input-tiff/im2_graycard.tiff",
-        # "input/input-tiff/im2_noflash.tiff",
-        # "input/input-tiff/im2_withflash.tiff"
-    # ]:
-    #     x = imageio.imread(p)
-    #     imageio.imsave(p.replace("2", "3"), x[:3100, ...])
+
 
