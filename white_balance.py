@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from os import path
 import argparse
+from pprint import pprint
 
 from constants import *
 from image_utils import *
@@ -195,3 +196,11 @@ def parse_args():
 
 if __name__ == '__main__':
     run(**parse_args())
+    # for p in [
+    #     "input/input-tiff/im2_graycard.tiff",
+        # "input/input-tiff/im2_noflash.tiff",
+        # "input/input-tiff/im2_withflash.tiff"
+    # ]:
+    #     x = imageio.imread(p)
+    #     imageio.imsave(p.replace("2", "3"), x[:3100, ...])
+

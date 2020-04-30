@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from constants import CONVERSION_MATRIX, EPSILON, INTENSITY_METHOD, DELTA_THRESHOLD
 from scipy.ndimage import gaussian_filter
 
+from os import path
+
 DEBUG = True
 
 
@@ -166,10 +168,10 @@ def calculate_chromaticity(im):
     return vector_to_chromaticity(chromaticity)
 
 
-def save_linear_image(path):
-    with rawpy.imread(path) as raw:
+def save_linear_image(im_path):
+    with rawpy.imread(im_path) as raw:
         rgb = raw.postprocess(gamma=(1, 1), no_auto_bright=True, output_bps=16)
-    imageio.imsave('samples/linear.tiff', rgb)
+    imageio.imsave('input/input-tiff/{}.tiff'.format(path.basename(im_path).split(".")[0]), rgb)
 
 
 def open_raw(path):
