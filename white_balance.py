@@ -2,6 +2,10 @@ from skimage import img_as_float
 from skimage.feature import canny
 from medpy.filter.smoothing import anisotropic_diffusion
 import argparse
+from warnings import simplefilter
+from skimage.exposure import adjust_gamma
+from skimage.transform import rescale
+
 
 from constants import *
 from image_utils import *
@@ -44,6 +48,7 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
 
     # 2 Remove flash chromaticity by dividing it out, DNC_p = D_p/C_f = R_p*k_p
     vec = chromaticity_to_vector(flash_chromaticity)
+
     diff_no_color = diff / vec
 
     # 3. Estimate reflective spectrum of objects
@@ -71,16 +76,17 @@ def correct_white_balance(im_no_flash: np.ndarray, im_flash: np.ndarray,
         color_edges |= canny(np.squeeze(R_noisy[..., channel]), sigma=7)  # best with noisy R with very high SD of 7
 
     # 3.4.3 Fill in error regions with best match colors
+    R_error_corrected = R.copy()
     for mask in [flash_specular_mask, shadow_area_mask]:
         mask = np.squeeze(mask) & (~color_edges)  # Remove edges to separate sub-regions
-        R = fill_holes(R, mask, spatial_color_map=im_no_flash)
+        R_error_corrected = fill_holes(R_error_corrected, mask, spatial_color_map=im_no_flash)
 
     # 4. Assuming R is same in both images we can now recalculate the WB image I_p = R_p * k2_p
     # 4.1 Some artificial balancing between these two leads to better results.
     brightness_exp = linear(brightness, BRIGHTNESS_MIN, BRIGHTNESS_MAX)
     saturation_exp = linear(2 * saturation - 1, 1, SATURATION_MAX) if saturation > 0.5 \
         else linear(2 * saturation, SATURATION_MIN, 1)
-    wb_im = (light_source_intensities ** brightness_exp) * (R ** saturation_exp)
+    wb_im = (normalize(light_source_intensities) ** brightness_exp) * (R_error_corrected ** saturation_exp)
     return wb_im
 
 
@@ -96,17 +102,18 @@ def run(**kwargs):
                                 saturation=kwargs["saturation"], brightness=kwargs["brightness"],
                                 shadow_regions=kwargs["shadow_regions"], flash_regions=kwargs["flash_regions"])
     if kwargs["out_path"]:
-        with open(kwargs["out_path"], 'w') as f:
+        with open(kwargs["out_path"], 'wb') as f:
             plt.imsave(f, res)
         out_dir, out_basename = path.split(kwargs["out_path"])
 
-        with open(path.join(out_dir, "gamma_corrected_" + out_basename), 'w') as f:
-            plt.imsave(f, res ** 0.3)
+        with open(path.join(out_dir, "gamma_corrected_" + out_basename), 'wb') as f:
+            plt.imsave(f, adjust_gamma(res, 0.33))
     else:
-        plt.imshow(res)
+        plt.imshow(adjust_gamma(im_noflash, 0.3))
+        plt.imshow()
+        plt.imshow(adjust_gamma(res, 0.3))
         plt.show()
-        plt.imshow(res ** 0.3)
-        plt.show()
+
 
 
 def parse_args():
@@ -186,7 +193,9 @@ def parse_args():
     return ret
 
 
+
 if __name__ == '__main__':
+    simplefilter(action='ignore', category=FutureWarning)
     run(**parse_args())
 
 

@@ -42,7 +42,7 @@ def image_intensities(im: np.ndarray, method: INTENSITY_METHOD = INTENSITY_METHO
     return intensities_smoothed
 
 
-def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray, hole_size_threshold=0.001):
+def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray, hole_size_threshold=0.0005):
     """
     Fill in holes represented in mask provided by finding appropriate colors using the spatial color map as a reference.
     :param arr: Image to correct
@@ -55,13 +55,14 @@ def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray,
     output = np.copy(arr)
     mask = np.squeeze(mask)
     labels, count = label(mask)
-    sample_size = 0.01 * mask.size  # Roughly 1% of pixels are sampled
+    sample_size = 0.01 * mask.size  # Roughly 2% of pixels are sampled
     sample_mask = normalize(np.random.uniform(size=spatial_color_map.shape[:2]) + mask.astype(np.float)) < \
                   (sample_size / (spatial_color_map.size - np.sum(mask)))
+
     sample_colors = spatial_color_map[sample_mask]
     hole_sizes = np.bincount(labels.ravel())[1:]  # 0's are ignored
     relevant_hole_indexes = np.where((hole_sizes / mask.size) > hole_size_threshold)[0] + 1
-    all_holes = np.zeros_like(arr)
+
     for hole_label in relevant_hole_indexes:
         hole = labels == hole_label
         hole = np.squeeze(hole)
@@ -74,7 +75,7 @@ def fill_holes(arr: np.ndarray, mask: np.ndarray, spatial_color_map: np.ndarray,
         most_similar_pixel = np.argmin(color_differences)
         sampled_color = arr[sample_mask][most_similar_pixel]
         output[hole] = sampled_color
-        all_holes[hole] = sampled_color
+
     return output
 
 
@@ -105,7 +106,7 @@ def get_most_common_color(arr, mask=None, blurred=False):
     return most_common_color
 
 
-def chromaticity_to_vector(chromaticity: np.ndarray):
+def chromaticity_to_vector(chromaticity: np.ndarray, normalized=False):
     """
     Return a vector of 3 channel color from chromaticity
     :param chromaticity: [x, y] a vector on length 2
@@ -113,7 +114,9 @@ def chromaticity_to_vector(chromaticity: np.ndarray):
     """
     assert chromaticity.size == 2
     assert chromaticity.shape in [(2,), (2, 1)]
-    return np.append(chromaticity, 1)
+    ret = np.append(chromaticity, 1)
+    # Note: Norm will never be 0 with 3rd value of 1
+    return ret / np.linalg.norm(ret) if normalized else ret
 
 
 def vector_to_chromaticity(vec: np.ndarray):
@@ -165,12 +168,12 @@ def calculate_chromaticity(im):
     If more than a gray-card was in the frame of the original image, the rest is ignored.
     :return: a 3-vector of values between 0 and 1 representing the delta from perfect gray.
     """
-    shape = im.shape
-    x, y = shape[0] // 2, shape[1] // 2
+    im = im[..., 0:3]  # in-case there is an alpha channel.
+    x, y = im.shape[0] // 2, im.shape[1] // 2
     patch_radius = 4
     center_patch = im[x - patch_radius: x + patch_radius, y - patch_radius: y + patch_radius, :]
     mean = center_patch.mean(axis=(0, 1))
-    unit_vec = np.array([1, 1, 1])
+    unit_vec = np.ones((3,))
     projection_vec = unit_vec * np.dot(mean, unit_vec) / np.dot(unit_vec, unit_vec)
     chromaticity = mean / projection_vec
     return vector_to_chromaticity(chromaticity)
@@ -258,23 +261,12 @@ def histogram3dplot(h, e, fig=None):
     ax.set_zlabel('Blue')
 
 
-# def read_image_as_lms(path):
-#     """
-# 	reads image from path and returns it in lms format
-# 	:param path:
-# 	:return:
-# 	"""
-#     im = cv2.imread(path)
-#     rgb = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-#     xyz = cv2.cvtColor(rgb, cv2.COLOR_RGB2XYZ) #rgb2xyz(rgb)
-#     return xyz_to_lms(xyz)
-
 def rgb_to_lms(im: np.ndarray):
     """
     reads image from path and returns it in lms format
-	:param path:
-	:return:
-	"""
+    :param path:
+    :return:
+    """
     im_uint = (im * 255).astype(np.uint16)
     rgb = cv2.cvtColor(im_uint, cv2.COLOR_BGR2RGB)
     # rgb = im * 255.0  # cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
